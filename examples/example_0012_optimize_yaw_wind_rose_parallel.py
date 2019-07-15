@@ -21,20 +21,7 @@ import floris.tools.wind_rose as rose
 import floris.tools.power_rose as pr
 import numpy as np
 import pandas as pd
-import matplotlib.pyplot as plt
-import floris.tools as wfct
-import floris.tools.visualization as vis
-import floris.tools.cut_plane as cp
-from floris.tools.optimization import YawOptimizationWindRose
-import floris.tools.wind_rose as rose
-import floris.tools.power_rose as pr
-import numpy as np
-import pandas as pd
-import WakeSteering_US.namingfarm as nf
-import time
-import namingfarm
 import WakeSteering_US.cp_for_any_turb as cturb
-import pdb
 
 if __name__ == '__main__':
     
