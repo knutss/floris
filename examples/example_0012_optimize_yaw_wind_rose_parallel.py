@@ -22,6 +22,8 @@ import floris.tools.power_rose as pr
 import numpy as np
 import pandas as pd
 import cp_for_any_turb as cturb
+import WakeSteering_US.namingfarm as nf
+
 
 if __name__ == '__main__':
     
