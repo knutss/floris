@@ -21,38 +21,73 @@ import floris.tools.wind_rose as rose
 import floris.tools.power_rose as pr
 import numpy as np
 import pandas as pd
+import matplotlib.pyplot as plt
+import floris.tools as wfct
+import floris.tools.visualization as vis
+import floris.tools.cut_plane as cp
+from floris.tools.optimization import YawOptimizationWindRose
+import floris.tools.wind_rose as rose
+import floris.tools.power_rose as pr
+import numpy as np
+import pandas as pd
+import WakeSteering_US.namingfarm as nf
+import time
+import namingfarm
+import WakeSteering_US.cp_for_any_turb as cturb
+import pdb
 
 if __name__ == '__main__':
     
-    # Instantiate the FLORIS object
+        # Instantiate the FLORIS object
     fi = wfct.floris_utilities.FlorisInterface("example_input.json")
-
+    
     # Define wind farm coordinates and layout
-    wf_coordinate = [39.8283, -98.5795]
-
+    mf =pd.read_pickle('Wind_US_Database')
+    kf = (mf.loc[mf['p_name'] == 'Cisco'])
+    wf_coordinate = [kf["ylat"].mean(),kf["xlong"].mean()]
+    
     # Set wind farm to N_row x N_row grid with constant spacing 
     # (2 x 2 grid, 5 D spacing)
     D = fi.floris.farm.turbines[0].rotor_diameter
-    N_row = 2
-    spc = 5
-    layout_x = []
-    layout_y = []
-    for i in range(N_row):
-    	for k in range(N_row):
-    		layout_x.append(i*spc*D)
-    		layout_y.append(k*spc*D)
+    lat_y = kf['ylat'].values
+    long_x = kf['xlong'].values
+    
+    layout_x, layout_y= nf.longlat_to_utm(lat_y, long_x)
+    
     N_turb = len(layout_x)
-
-    fi.reinitialize_flow_field(layout_array=(layout_x, layout_y),wind_direction=270.0,wind_speed=8.0)
+    
+    fi.reinitialize_flow_field(layout_array=(layout_x, layout_y), wind_direction=270.0, wind_speed=8.0)
     fi.calculate_wake()
-
-    # set min and max yaw offsets for optimization
+    
+    #Diameter and Rated power based on the wind farm
+    D = kf["t_rd"]
+    P_r = kf["t_cap"]
+    hub_h = kf["t_hh"]
+    
+    C_p_rated = 0.43003137
+    C_t_rated = 0.70701647
+    
+    #Normalized wind speed for any turbine
+    tf= pd.read_pickle('Wind_Cp_look_up_table')
+    
+    ## Enumerate so for each turbine 
+    for count, turbine in enumerate(fi.floris.farm.flow_field.turbine_map.turbines):
+            turbine.rotor_diameter = D.iloc[count]
+            turbine.hub_height = hub_h.iloc[count]
+            T_Area = (np.pi* (D.iloc[count]**2)) /4
+            U_turb_rated= (2* P_r.iloc[count]*(10**3)/ (C_p_rated * 1.225* T_Area))**(1/3)
+            U_turb_norm =  tf.iloc[:,0] / U_turb_rated
+            cp_new = cturb.cp_for_any_turb(U_turb_norm)
+            ct_new = cturb.ct_for_any_turb(U_turb_norm)
+            turbine.power_thrust_table["power"] = cp_new
+            turbine.power_thrust_table["thrust"] = ct_new
+    
+    # set min and max yaw offsets for optimization 
     min_yaw = 0.0
     max_yaw = 25.0
-
+    
     # Define minimum and maximum wind speed for optimizing power. 
     # Below minimum wind speed, assumes power is zero.
-    # Above maximum_ws, assume optimal yaw offsets are 0 degrees
     minimum_ws = 3.0
     maximum_ws = 15.0
 
@@ -106,18 +141,18 @@ if __name__ == '__main__':
     # =============================================================================
 
     # Instantiate the parallel optimization object
-    yaw_opt = YawOptimizationWindRoseParallel(fi, df.wd, df.ws, 
-                                   minimum_yaw_angle=min_yaw, 
-                                   maximum_yaw_angle=max_yaw,
-                                   minimum_ws=minimum_ws,
-                                   maximum_ws=maximum_ws)
+    yaw_opt = YawOptimizationWindRoseParallel(fi, df.wd, df.ws, df.ti,
+                                       minimum_yaw_angle=min_yaw, 
+                                       maximum_yaw_angle=max_yaw,
+                                       minimum_ws=minimum_ws,
+                                       maximum_ws=maximum_ws)
 
     # Perform optimization
     df_base, df_opt = yaw_opt.optimize()
 
     # Summarize using the power rose module
     power_rose = pr.PowerRose()
-    case_name = 'Example '+str(N_row)+' x '+str(N_row)+ ' Wind Farm'
+    case_name = 'Example '+kf['p_name'].iloc[0]+ ' Wind Farm'
 
     # combine wind farm-level power into one dataframe
     df_power = pd.DataFrame({'ws':df.ws,'wd':df.wd, \
