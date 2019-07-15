@@ -25,6 +25,7 @@ import pandas as pd
 import pickle
 from pyproj import Proj
 import floris.utilities as geo
+import pdb
 
 
 
@@ -47,6 +48,7 @@ class WindRose():
         self.ws_step = 5.
         self.wd = np.array([])
         self.ws = np.array([])
+        #self.ti = np.array([])
         self.df = pd.DataFrame()
 
     def save(self, filename):
@@ -103,7 +105,7 @@ class WindRose():
         df['ws'] = pd.cut(df.ws, ws_edges, labels=ws)
 
         # Regroup
-        df = df.groupby(['ws', 'wd']).sum()
+        df = df.groupby(['ws', 'wd', 'ti']).sum()
 
         # Fill nans
         df = df.fillna(0)
@@ -114,6 +116,7 @@ class WindRose():
         # Set to float
         df['ws'] = df.ws.astype(float)
         df['wd'] = df.wd.astype(float)
+        df['ti'] = df.ti.astype(float)
 
         return df
 
@@ -175,9 +178,9 @@ class WindRose():
 
         # Cut into bins
         df['wd'] = pd.cut(df.wd, wd_edges, labels=wd)
-
+        #pdb.set_trace()
         # Regroup
-        df = df.groupby(['ws', 'wd']).sum()
+        df = df.groupby(['ws', 'wd','ti']).sum()
 
         # Fill nans
         df = df.fillna(0)
@@ -188,8 +191,9 @@ class WindRose():
         # Set to float Re-wrap
         df['wd'] = df.wd.astype(float)
         df['ws'] = df.ws.astype(float)
+        df['ti']= df.ti.astype(float)
         df['wd'] = geo.wrap_360(df.wd)
-
+        #pdb.set_trace()
         return df
 
     def internal_resample_wind_direction(self, wd=np.arange(0, 360, 5.)):
@@ -542,18 +546,18 @@ class WindRose():
                                                 limit_month=limit_month, 
                                                 st_date=st_date, 
                                                 en_date=en_date)
-        
+            #pdb.set_trace()
             ws_new = d['ws']
             wd_new = d['wd']
-            
+            TI = d['Turbulence_Int']
         # Case for ht not matching discete height
         else: 
             h_range_up = next(x[0] for x in enumerate(h_range) if x[1] > ht)
             h_range_low = h_range_up - 1
             hub_up = h_range[h_range_up]
             hub_low = h_range[h_range_low]
-        
-        # Load data for boundary cases of ht 
+            
+            # Load data for boundary cases of ht 
             d_low = self.load_wind_toolkit_hsds(lat, 
                                             lon, 
                                             hub_low, 
@@ -567,13 +571,14 @@ class WindRose():
                                             limit_month=limit_month, 
                                             st_date=st_date, 
                                             en_date=en_date)
-           
+            #pdb.set_trace()
             # Wind Speed interpolation
             ws_low = d_low['ws']
             ws_high = d_up['ws']
             
             ws_new = np.array(ws_low) * (1-((ht - hub_low)/(hub_up - hub_low))) \
-                + np.array(ws_high) * ((ht - hub_low)/(hub_up - hub_low))
+            + np.array(ws_high) * ((ht - hub_low)/(hub_up - hub_low))
+                
             
             # Wind Direction interpolation using Circular Mean method 
             wd_low = d_low['wd']
@@ -585,37 +590,46 @@ class WindRose():
             cos1 = np.cos(np.array(wd_high) * (np.pi/180))
 
             sin_wd = sin0 * (1-((ht - hub_low)/(hub_up - hub_low)))+ sin1 * \
-                ((ht - hub_low)/(hub_up - hub_low))
+            ((ht - hub_low)/(hub_up - hub_low))
+                
             cos_wd = cos0 * (1-((ht - hub_low)/(hub_up - hub_low)))+ cos1 * \
-                ((ht - hub_low)/(hub_up - hub_low))
+            ((ht - hub_low)/(hub_up - hub_low))
+                
                 
             # Interpolated wind direction 
             wd_new = 180/np.pi * np.arctan2(sin_wd, cos_wd)
-        
+            TI = d_up['Turbulence_Int']
+       
         # Create a dataframe named df
+        # pdb.set_trace()
         df= pd.DataFrame({'ws': ws_new,
-                          'wd': wd_new})
-                
+                          'wd': wd_new,
+                          'ti': TI})
+               
         # Start by simply round and wrapping the wind direction and wind speed columns
         df['wd'] = geo.wrap_360(df.wd.round())
         df['ws'] = geo.wrap_360(df.ws.round())
         
         # Now group up
+        
         df['freq_val'] = 1.
-        df = df.groupby(['ws', 'wd']).sum()
+        df = df.groupby(['ws', 'wd','ti']).sum()
         df['freq_val'] = df.freq_val.astype(float) / df.freq_val.sum()
+        
         df = df.reset_index()
         
         # Save the df at this point
-        self.df = df
         
+        self.df = df
         # Resample onto the provided wind speed and wind direction binnings
+        #pdb.set_trace()
+        #pdb.set_trace()
         self.internal_resample_wind_speed(ws=ws)
         self.internal_resample_wind_direction(wd=wd)
-        
+        #self.ti = self.df['ti']
         return self.df
-        
-
+         
+    
     def load_wind_toolkit_hsds(self,
                                lat,
                                lon,
@@ -658,12 +672,16 @@ class WindRose():
         # assign wind direction, wind speed, and time datasets for the desired height
         wd_dset = f['winddirection_' + str(ht) + 'm']
         ws_dset = f['windspeed_' + str(ht) + 'm']
+        Obvu_dset = f['inversemoninobukhovlength_2m']
         dt = f['datetime']
         dt = pd.DataFrame({'datetime': dt[:]}, index=range(0, dt.shape[0]))
         dt['datetime'] = dt['datetime'].apply(dateutil.parser.parse)
-
-        # find dataset indices from lat/long
+        #pdb.set_trace()
+        # find dataset indices from lat/long and define L and TI_set
         Location_idx = self.indices_for_coord(f, lat, lon)
+        L = self.Obvu_dset_to_L(Obvu_dset, Location_idx)
+        TI_set = self.TI_Calculator_IU2(L)
+        #pdb.set_trace()
 
         # check if in bounds
         if (Location_idx[0] < 0) | (Location_idx[0] >= wd_dset.shape[1]) | (
@@ -677,7 +695,9 @@ class WindRose():
         df = pd.DataFrame()
         df['wd'] = wd_dset[:, Location_idx[0], Location_idx[1]]
         df['ws'] = ws_dset[:, Location_idx[0], Location_idx[1]]
+        df['Turbulence_Int'] = TI_set
         df['datetime'] = dt['datetime']
+        #pdb.set_trace()
 
         # limit dates if start and end dates are provided
         if (st_date is not None):
@@ -690,10 +710,53 @@ class WindRose():
         if not limit_month is None:
             df['month'] = df['datetime'].map(lambda x: x.month)
             df = df[df.month.isin(limit_month)]
-        df = df[['wd', 'ws']]
+        df = df[['wd', 'ws','Turbulence_Int']]
 
         return df
 
+    def Obvu_dset_to_L(self, Obvu_dset, Location_idx):
+        """
+        Function to find Obukhov length array.
+        
+        Args: 
+            Obvu_dset: Dataset for Obukhov lengths from Wind Toolkit. 
+            Location_idx: Lat/Lon Coordinates 
+        """
+
+        dk = pd.DataFrame()
+        dk['Obuknov_length'] = Obvu_dset[:,Location_idx[0], Location_idx[1]]
+        for i in dk:
+            L = 1 /dk[i]
+        return L
+    
+    def TI_Calculator_IU2(self, L):
+        """
+        Function to determien TI for each ws and wd based on Obukhov length
+        
+        Args: 
+            L: Obukhov Length  
+        """
+        TI_set=[]
+        for i in L:        
+            # Strongly Stable
+            if 0 < i <100:
+                TI = 0.04        
+            #Stable
+            elif 100 < i < 600:
+                TI = 0.09        
+            # Neutral 
+            elif abs(i) > 600:
+                TI = 0.115      
+            #Convective
+            elif -600 < i < -50:
+               TI = 0.165
+            #Strongly Convective 
+            elif -50 < i < 0:
+                TI = 0.2 
+            TI_set.append(TI)
+        return TI_set
+    
+    
     def indices_for_coord(self, f, lat_index, lon_index):
         #TODO This function is tough for me to follow. What is f?
         """

@@ -328,6 +328,7 @@ class YawOptimizationWindRose(Optimization):
 
     def __init__(self, fi, wd,
                            ws,
+                           ti,
                            minimum_yaw_angle=0.0,
                            maximum_yaw_angle=25.0,
                            minimum_ws=3.0,
@@ -348,6 +349,7 @@ class YawOptimizationWindRose(Optimization):
         self.reinitialize_opt_wind_rose(
             wd=wd,
             ws=ws,
+            ti=ti,
             minimum_yaw_angle=minimum_yaw_angle,
             maximum_yaw_angle=maximum_yaw_angle,
             minimum_ws=minimum_ws,
@@ -408,6 +410,7 @@ class YawOptimizationWindRose(Optimization):
     def reinitialize_opt_wind_rose(self,
             wd=None,
             ws=None,
+            ti=None,
             minimum_yaw_angle=None,
             maximum_yaw_angle=None,
             minimum_ws=None,
@@ -454,6 +457,8 @@ class YawOptimizationWindRose(Optimization):
             self.wd = wd
         if ws is not None:
             self.ws = ws
+        if ti is not None:
+            self.ti = ti
         if minimum_ws is not None:
             self.minimum_ws = minimum_ws
         if maximum_ws is not None:
@@ -520,13 +525,13 @@ class YawOptimizationWindRose(Optimization):
 
         for i in range(len(self.wd)):
             print('Computing wind speed, wind direction pair '+str(i)+' out of '+str(len(self.wd)) \
-                +': wind speed = '+str(self.ws[i])+' m/s, wind direction = '+str(self.wd[i])+' deg.')
+                +': wind speed = '+str(self.ws[i])+' m/s, wind direction = '+str(self.wd[i])+' deg., turbulence_intensity =' +str(self.ti[i]))
 
             # Find baseline power in FLORIS
 
             if self.ws[i] >= self.minimum_ws:
                 self.fi.reinitialize_flow_field(
-                    wind_direction=self.wd[i], wind_speed=self.ws[i])
+                    wind_direction=self.wd[i], wind_speed=self.ws[i], turbulence_intensity= self.ti[i])
                 
                 # calculate baseline power
                 self.fi.calculate_wake(yaw_angles=0.0)
@@ -548,7 +553,7 @@ class YawOptimizationWindRose(Optimization):
 
             if (self.ws[i] >= self.minimum_ws) & (self.ws[i] <= self.maximum_ws):
                 self.fi.reinitialize_flow_field(
-                    wind_direction=self.wd[i], wind_speed=self.ws[i])
+                    wind_direction=self.wd[i], wind_speed=self.ws[i], turbulence_intensity= self.ti[i])
 
                 opt_yaw_angles = self._optimize()
 
@@ -563,7 +568,7 @@ class YawOptimizationWindRose(Optimization):
                 print('No change in controls suggested for this inflow \
                         condition...')
                 self.fi.reinitialize_flow_field(
-                    wind_direction=self.wd[i], wind_speed=self.ws[i])
+                    wind_direction=self.wd[i], wind_speed=self.ws[i], turbulence_intensity= self.ti[i])
                 self.fi.calculate_wake(yaw_angles=0.0)
                 opt_yaw_angles = self.nturbs*[0.0]
                 power_opt = self.fi.get_turbine_power()
@@ -663,7 +668,7 @@ class YawOptimizationWindRoseParallel(YawOptimizationWindRose):
         # Find baseline power in FLORIS
 
         if ws >= self.minimum_ws:
-            self.fi.reinitialize_flow_field(wind_direction=wd, wind_speed=ws)
+            self.fi.reinitialize_flow_field(wind_direction=wd, wind_speed=ws, turbulence_intensity=ti)
             # calculate baseline power
             self.fi.calculate_wake(yaw_angles=0.0)
             power_base = self.fi.get_turbine_power()
@@ -684,7 +689,7 @@ class YawOptimizationWindRoseParallel(YawOptimizationWindRose):
 
         if (ws >= self.minimum_ws) & (ws <= self.maximum_ws):
             self.fi.reinitialize_flow_field(
-                wind_direction=wd, wind_speed=ws)
+                wind_direction=wd, wind_speed=ws, turbulence_intensity=ti)
 
             opt_yaw_angles = self._optimize()
 
@@ -699,7 +704,7 @@ class YawOptimizationWindRoseParallel(YawOptimizationWindRose):
             print('No change in controls suggested for this inflow \
                     condition...')
             self.fi.reinitialize_flow_field(
-                wind_direction=wd, wind_speed=ws)
+                wind_direction=wd, wind_speed=ws, turbulence_intensity=ti)
             self.fi.calculate_wake(yaw_angles=0.0)
             opt_yaw_angles = self.nturbs*[0.0]
             power_opt = self.fi.get_turbine_power()
@@ -762,7 +767,7 @@ class YawOptimizationWindRoseParallel(YawOptimizationWindRose):
         df_opt = pd.DataFrame()
 
         with MPIPoolExecutor() as executor: 
-            for df_base_one, df_opt_one in executor.map(self._optimize_one_case,self.ws.values,self.wd.values):
+            for df_base_one, df_opt_one in executor.map(self._optimize_one_case,self.ws.values,self.wd.values,self.ti.values):
             
                 # add variables to dataframe
                 df_base = df_base.append(df_base_one)
@@ -867,7 +872,7 @@ class LayoutOptimization(Optimization):
 
         for i in range(len(self.wd)):
             self.fi.reinitialize_flow_field(
-                wind_direction=self.wd[i], wind_speed=self.ws[i])
+                wind_direction=self.wd[i], wind_speed=self.ws[i], turbulence_intensity= self.ti[i])
             self.fi.calculate_wake()
 
             AEP_sum = AEP_sum + self.fi.get_farm_power()*self.freq[i]*8760
