@@ -628,7 +628,7 @@ class YawOptimizationWindRoseParallel(YawOptimizationWindRose):
 
     # Private methods
 
-    def _optimize_one_case(self,ws,wd):
+    def _optimize_one_case(self,ws,wd,ti):
         """
         For a single (wind speed, direction) pair, finds the baseline power produced by the wind farm, 
         the ideal power without wake losses, and the power resulting from optimal wake steering.
