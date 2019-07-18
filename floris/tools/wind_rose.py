@@ -623,10 +623,13 @@ class WindRose():
         self.df = df
         # Resample onto the provided wind speed and wind direction binnings
         #pdb.set_trace()
-        #pdb.set_trace()
+        
         self.internal_resample_wind_speed(ws=ws)
         self.internal_resample_wind_direction(wd=wd)
         #self.ti = self.df['ti']
+        #pdb.set_trace()
+        #self.df.to_csv(r'C:\\Users\dbensaso\Documents\Code\WakeSteering_US\WakeSteering_US\\SavingPlots\df_example.csv')
+
         return self.df
          
     
@@ -890,13 +893,118 @@ class WindRose():
 
         # Configure the plot
         ax.legend(reversed(rects), ws_labels)
+        tfont = {'fontname':'Helvetica'}
+        plt.title('Wind Rose',y=1.08, **tfont)
         ax.set_theta_direction(-1)
         ax.set_theta_offset(np.pi / 2.0)
         ax.set_theta_zero_location("N")
         ax.set_xticklabels(['N', 'NE', 'E', 'SE', 'S', 'SW', 'W', 'NW'])
 
         return ax
-
+    
+    def ti_plot_ws(self):
+        """
+        Generate plots for ti frequency at each wind speed
+        """
+        dl = self.df.drop(['wd'],axis=1)
+        lf = dl.groupby(['ws','ti']).sum()
+        dw = lf.reset_index()
+        
+        
+        fig, ax = plt.subplots(figsize=(10,7))  
+        ti = dw['ti'].drop_duplicates()
+        margin_bottom = np.zeros(len(dw['ws'].drop_duplicates()))
+        colors = ["#1e5631", "#a4de02","#76ba1b","#4c9a2a","#acdf87"]
+    
+    
+        for num, tis in enumerate(ti):
+            values = list(dw[dw['ti'] == tis].loc[:, 'freq_val'])
+        
+            dw[dw['ti'] == tis].plot.bar(x='ws',y='freq_val', ax=ax, bottom = margin_bottom, color=colors[num],label=tis) 
+                                            
+            margin_bottom += values
+        tfont = {'fontname':'Helvetica'}
+        plt.title('Turbulence Intensity Frequencies as Function of Wind Speed',**tfont)
+        plt.xlabel('Wind Speed (m/s)')
+        plt.ylabel('Frequency')
+        #ti_ws_name = str(kf['p_name'].iloc[0]) + "_ti_ws.jpg"
+        #plt.savefig(r'C:\Users\dbensaso\Documents\Code\WakeSteering_US\Working_dir_WS_US\Saved_fig_data\ti_ws_plots_farm\{}'.format(ti_ws_name))
+        #plt.show()
+            
+    
+    def ti_plot_wd(self):
+        """
+        Generate plots for ti frequency at each wind direction
+        """
+        dl = self.df.drop(['ws'],axis=1)
+        lf = dl.groupby(['wd','ti']).sum()
+        dw = lf.reset_index()
+        data_0_20 = (dw[ (0 <= dw.wd) & (dw.wd <=20)])
+        data_20_40 = (dw[ (20 < dw.wd) & (dw.wd <=40)])
+        data_40_60 = (dw[ (40 < dw.wd) & (dw.wd <=60)])
+        data_60_80 = (dw[ (60 < dw.wd) & (dw.wd <=80)])
+        data_80_100 = (dw[ (80 < dw.wd) & (dw.wd <=100)])
+        data_100_120 = (dw[ (100 < dw.wd) & (dw.wd <=120)])
+        data_120_140 = (dw[ (120 < dw.wd) & (dw.wd <=140)])
+        data_140_160 = (dw[ (140 < dw.wd) & (dw.wd <=160)])
+        data_160_180 = (dw[ (160 < dw.wd) & (dw.wd <=180)])
+        data_180_200 = (dw[ (180 < dw.wd) & (dw.wd <=200)])
+        data_200_220 = (dw[ (200 < dw.wd) & (dw.wd <=220)])
+        data_220_240 = (dw[ (220 < dw.wd) & (dw.wd <=240)])
+        data_240_260 = (dw[ (240 < dw.wd) & (dw.wd <=260)])
+        data_260_280 = (dw[ (260 < dw.wd) & (dw.wd <=280)])
+        data_280_300 = (dw[ (280 < dw.wd) & (dw.wd <=300)])
+        data_300_320 = (dw[ (300 < dw.wd) & (dw.wd <=320)])
+        data_320_340 = (dw[ (320 < dw.wd) & (dw.wd <=340)])
+        data_340_360 = (dw[ (340 < dw.wd) & (dw.wd <=360)])
+        data_0_20['wd']=10
+        data_20_40['wd']=30
+        data_40_60['wd']=50
+        data_60_80['wd']=70
+        data_80_100['wd']=90
+        data_100_120['wd']=110
+        data_120_140['wd']=130
+        data_140_160['wd']=150
+        data_160_180['wd']=170
+        data_180_200['wd']=190
+        data_200_220['wd']=210
+        data_220_240['wd']=230
+        data_240_260['wd']=250
+        data_260_280['wd']=270
+        data_280_300['wd']=290
+        data_300_320['wd']=310
+        data_320_340['wd']=330
+        data_340_360['wd']=350
+        merged_df = pd.concat([data_0_20,data_20_40, data_40_60,data_60_80, \
+                               data_80_100,data_100_120,data_120_140,data_140_160, \
+                               data_160_180,data_180_200,data_200_220,data_220_240, \
+                               data_240_260,data_260_280,data_280_300,data_300_320,data_320_340,data_340_360])
+        
+        lf = merged_df .groupby(['wd','ti']).sum()
+        dw = lf.reset_index()
+        
+        
+        fig, ax = plt.subplots(figsize=(10,7))
+        ax.set_facecolor('white')
+        ti = dw['ti'].drop_duplicates()
+        margin_bottom = np.zeros(len(dw['wd'].drop_duplicates()))
+        colors = ["#1170ed", "#082284","#5ca1a9","#3c487c","#69e2f0"]
+        for num, tis in enumerate(ti):
+            values = list(dw[dw['ti'] == tis].loc[:, 'freq_val'])
+        
+            dw[dw['ti'] == tis].plot.bar(x='wd',y='freq_val', ax=ax, bottom = margin_bottom, color=colors[num],label=tis) 
+                                            
+            margin_bottom += values
+        tfont = {'fontname':'Helvetica'}
+        plt.title('Turbulence Intensity Frequencies as Function of Wind Direction',**tfont)
+        plt.xlabel('Wind Direction ($^\circ$)')
+        plt.ylabel('Frequency')
+        #ti_wd_name = str(kf['p_name'].iloc[0]) + "_ti_wd.jpg"
+        #plt.savefig(r'C:\Users\dbensaso\Documents\Code\WakeSteering_US\Working_dir_WS_US\Saved_fig_data\ti_wd_plots_farm\{}'.format(ti_wd_name))
+        #plt.show()
+        
+        
+        
     def export_for_floris_opt(self):
         """
         Shortcut function to generate output for FLORIS.
