@@ -195,6 +195,64 @@ class WindRose():
         df['wd'] = geo.wrap_360(df.wd)
         #pdb.set_trace()
         return df
+    
+    def resample_wind_direction_TI(self, df, wd=np.arange(0, 360, 5.)):
+        """
+        Modify the default bins for sorting wind direction.
+
+        Args:
+            df (pd.DataFrame): Wind direction data
+                wd (np.array, optional): Vector of wind direction bins
+                for WindRose. Defaults to np.arange(0, 360, 5.).
+
+        Returns:
+            df (pd.DataFrame): Resampled wind direction for WindRose
+        """
+        # Make a copy of incoming dataframe
+        df = df.copy(deep=True)
+
+        # Get the wind step
+        wd_step = wd[1] - wd[0]
+
+        # Get bin edges
+        wd_edges = (wd - wd_step / 2.0)
+        wd_edges = np.append(wd_edges, np.array(wd[-1] + wd_step / 2.0))
+
+        # Get the overhangs
+        negative_overhang = wd_edges[0]
+        positive_overhang = wd_edges[-1] - 360.
+
+        # Need potentially to wrap high angle direction to negative for correct binning
+        df['wd'] = geo.wrap_360(df.wd)
+        if negative_overhang < 0:
+            print('Correcting negative Overhang:%.1f' % negative_overhang)
+            df['wd'] = np.where(df.wd.values >= 360. + negative_overhang,
+                                df.wd.values - 360., df.wd.values)
+
+        # Check on other side
+        if positive_overhang > 0:
+            print('Correcting positive Overhang:%.1f' % positive_overhang)
+            df['wd'] = np.where(df.wd.values <= positive_overhang,
+                                df.wd.values + 360., df.wd.values)
+
+        # Cut into bins
+        df['wd'] = pd.cut(df.wd, wd_edges, labels=wd)
+        #pdb.set_trace()
+        # Regroup
+        df = df.groupby(['ti', 'wd']).sum()
+
+        # Fill nans
+        df = df.fillna(0)
+
+        # Reset the index
+        df = df.reset_index()
+
+        # Set to float Re-wrap
+        df['wd'] = df.wd.astype(float)
+        df['ti']= df.ti.astype(float)
+        df['wd'] = geo.wrap_360(df.wd)
+        #pdb.set_trace()
+        return df
 
     def internal_resample_wind_direction(self, wd=np.arange(0, 360, 5.)):
         """
@@ -858,7 +916,7 @@ class WindRose():
         # Resample data onto bins
         # df_plot = self.resample_wind_speed(self.df,ws=ws_bins)
         df_plot = self.resample_wind_direction(self.df, wd=wd_bins)
-
+        #pdb.set_trace()
         # Make labels for wind speed based on edges
         ws_step = ws_right_edges[1] - ws_right_edges[0]
         # ws = ws_edges
@@ -866,7 +924,7 @@ class WindRose():
         # ws_edges = np.append(ws_edges,np.array(ws[-1] + ws_step / 2.0))
         # ws_edges = np.append([0], ws_right_edges)
         ws_labels = ['%d-%d m/s' % (w - ws_step, w) for w in ws_right_edges]
-
+        #pdb.set_trace()
         # Grab the wd_step
         wd_step = wd_bins[1] - wd_bins[0]
 
@@ -890,7 +948,7 @@ class WindRose():
                            color=color_array(ws_idx),
                            edgecolor='k'))
             # break
-
+        #pdb.set_trace()
         # Configure the plot
         ax.legend(reversed(rects), ws_labels)
         tfont = {'fontname':'Helvetica'}
@@ -900,6 +958,78 @@ class WindRose():
         ax.set_theta_zero_location("N")
         ax.set_xticklabels(['N', 'NE', 'E', 'SE', 'S', 'SW', 'W', 'NW'])
 
+        return ax
+    
+    def plot_wind_rose_TI(self,
+                       ax=None,
+                       color_map='viridis_r',
+                       ti_right_edges=np.array([0.06, 0.1, 0.14, 0.18,0.22]),
+                       wd_bins=np.arange(0, 360, 15.)):
+        """
+        Generate wind rose plot. If no axis is provided, make a new one.
+
+        Args:
+            ax (:py:class:`matplotlib.pyplot.axes`, optional): Figure axes to which data should
+                be plotted. Defaults to None.
+            color_map (str, optional): name of colormap.
+                Defaults to 'viridis_r'.
+            ws_right_edges (np.array, optional): upper bounds of wind
+                speed bins. Defaults to np.array([5, 10, 15, 20, 25]).
+            wd_bins (np.array, optional): wind direction bin limits.
+                Defaults to np.arange(0, 360, 15.).
+
+        Returns:
+            ax (:py:class:`matplotlib.pyplot.axes`): Figure axes
+                containing wind rose plot.
+        """
+        # Based on code provided by Patrick Murphy
+        #pdb.set_trace() 
+        # Resample data onto bins
+        # df_plot = self.resample_wind_speed(self.df,ws=ws_bins)
+        df_plot = self.resample_wind_direction_TI(self.df, wd=wd_bins)
+
+        # Make labels for wind speed based on edges
+        ti_step = ti_right_edges[1] - ti_right_edges[0]
+        # ws = ws_edges
+        # ws_edges = (ws - ws_step / 2.0)
+        # ws_edges = np.append(ws_edges,np.array(ws[-1] + ws_step / 2.0))
+        # ws_edges = np.append([0], ws_right_edges)
+        ti_labels = ['%.2f-%.2f ' % (w - ti_step, w) for w in ti_right_edges]
+        #ti= self.df['ti']
+        # Grab the wd_step
+        wd_step = wd_bins[1] - wd_bins[0]
+
+        # Set up figure
+        if ax is None:
+            _, ax = plt.subplots(subplot_kw=dict(polar=True),figsize=(12,8))
+
+        # Get a color array
+        color_array = cm.get_cmap(color_map, len(ti_right_edges))
+        #pdb.set_trace()
+        for wd_idx, wd in enumerate(wd_bins):
+            rects = list()
+            df_plot_sub = df_plot[df_plot.wd == wd]
+            for ti_idx, ti in enumerate(ti_right_edges[::-1]):
+                plot_val = df_plot_sub[df_plot_sub.ti <= ti].freq_val.sum(
+                )  # Get the sum of frequency up to this wind speed
+                rects.append(
+                    ax.bar(np.radians(wd),
+                           plot_val,
+                           width=0.9 * np.radians(wd_step),
+                           color=color_array(ti_idx),
+                           edgecolor='k'))
+            # break
+        #pdb.set_trace()    
+        # Configure the plot
+        ax.legend(reversed(rects), ti_labels, loc='lower right')
+        tfont = {'fontname':'Helvetica'}
+        plt.title('Wind Rose (TI)',y=1.08, **tfont)
+        ax.set_theta_direction(-1)
+        ax.set_theta_offset(np.pi/2.0)
+        ax.set_theta_zero_location("N")
+        ax.set_xticklabels(['N', 'NE', 'E', 'SE', 'S', 'SW', 'W', 'NW'])
+    
+        
         return ax
     
     def ti_plot_ws(self):
@@ -930,79 +1060,6 @@ class WindRose():
         #ti_ws_name = str(kf['p_name'].iloc[0]) + "_ti_ws.jpg"
         #plt.savefig(r'C:\Users\dbensaso\Documents\Code\WakeSteering_US\Working_dir_WS_US\Saved_fig_data\ti_ws_plots_farm\{}'.format(ti_ws_name))
         #plt.show()
-            
-    
-    def ti_plot_wd(self):
-        """
-        Generate plots for ti frequency at each wind direction
-        """
-        dl = self.df.drop(['ws'],axis=1)
-        lf = dl.groupby(['wd','ti']).sum()
-        dw = lf.reset_index()
-        data_0_20 = (dw[ (0 <= dw.wd) & (dw.wd <=20)])
-        data_20_40 = (dw[ (20 < dw.wd) & (dw.wd <=40)])
-        data_40_60 = (dw[ (40 < dw.wd) & (dw.wd <=60)])
-        data_60_80 = (dw[ (60 < dw.wd) & (dw.wd <=80)])
-        data_80_100 = (dw[ (80 < dw.wd) & (dw.wd <=100)])
-        data_100_120 = (dw[ (100 < dw.wd) & (dw.wd <=120)])
-        data_120_140 = (dw[ (120 < dw.wd) & (dw.wd <=140)])
-        data_140_160 = (dw[ (140 < dw.wd) & (dw.wd <=160)])
-        data_160_180 = (dw[ (160 < dw.wd) & (dw.wd <=180)])
-        data_180_200 = (dw[ (180 < dw.wd) & (dw.wd <=200)])
-        data_200_220 = (dw[ (200 < dw.wd) & (dw.wd <=220)])
-        data_220_240 = (dw[ (220 < dw.wd) & (dw.wd <=240)])
-        data_240_260 = (dw[ (240 < dw.wd) & (dw.wd <=260)])
-        data_260_280 = (dw[ (260 < dw.wd) & (dw.wd <=280)])
-        data_280_300 = (dw[ (280 < dw.wd) & (dw.wd <=300)])
-        data_300_320 = (dw[ (300 < dw.wd) & (dw.wd <=320)])
-        data_320_340 = (dw[ (320 < dw.wd) & (dw.wd <=340)])
-        data_340_360 = (dw[ (340 < dw.wd) & (dw.wd <=360)])
-        data_0_20['wd']=10
-        data_20_40['wd']=30
-        data_40_60['wd']=50
-        data_60_80['wd']=70
-        data_80_100['wd']=90
-        data_100_120['wd']=110
-        data_120_140['wd']=130
-        data_140_160['wd']=150
-        data_160_180['wd']=170
-        data_180_200['wd']=190
-        data_200_220['wd']=210
-        data_220_240['wd']=230
-        data_240_260['wd']=250
-        data_260_280['wd']=270
-        data_280_300['wd']=290
-        data_300_320['wd']=310
-        data_320_340['wd']=330
-        data_340_360['wd']=350
-        merged_df = pd.concat([data_0_20,data_20_40, data_40_60,data_60_80, \
-                               data_80_100,data_100_120,data_120_140,data_140_160, \
-                               data_160_180,data_180_200,data_200_220,data_220_240, \
-                               data_240_260,data_260_280,data_280_300,data_300_320,data_320_340,data_340_360])
-        
-        lf = merged_df .groupby(['wd','ti']).sum()
-        dw = lf.reset_index()
-        
-        
-        fig, ax = plt.subplots(figsize=(10,7))
-        ax.set_facecolor('white')
-        ti = dw['ti'].drop_duplicates()
-        margin_bottom = np.zeros(len(dw['wd'].drop_duplicates()))
-        colors = ["#1170ed", "#082284","#5ca1a9","#3c487c","#69e2f0"]
-        for num, tis in enumerate(ti):
-            values = list(dw[dw['ti'] == tis].loc[:, 'freq_val'])
-        
-            dw[dw['ti'] == tis].plot.bar(x='wd',y='freq_val', ax=ax, bottom = margin_bottom, color=colors[num],label=tis) 
-                                            
-            margin_bottom += values
-        tfont = {'fontname':'Helvetica'}
-        plt.title('Turbulence Intensity Frequencies as Function of Wind Direction',**tfont)
-        plt.xlabel('Wind Direction ($^\circ$)')
-        plt.ylabel('Frequency')
-        #ti_wd_name = str(kf['p_name'].iloc[0]) + "_ti_wd.jpg"
-        #plt.savefig(r'C:\Users\dbensaso\Documents\Code\WakeSteering_US\Working_dir_WS_US\Saved_fig_data\ti_wd_plots_farm\{}'.format(ti_wd_name))
-        #plt.show()
-        
         
         
     def export_for_floris_opt(self):
